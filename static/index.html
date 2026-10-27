@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis</title>
+<style>
+  :root {
+    --bg: #fafaf9; --superficie: #ffffff; --borda: #e7e5e4; --texto: #1c1917;
+    --sutil: #78716c; --acento: #4f46e5; --usuario: #eef2ff; --erro: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0c0e; --superficie: #17171a; --borda: #27272a; --texto: #f4f4f5;
+      --sutil: #a1a1aa; --acento: #818cf8; --usuario: #1e1b4b; --erro: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100dvh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--texto);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .coluna { width: 100%; max-width: 680px; margin: 0 auto; padding: 0 16px; }
+
+  header { padding: 20px 0 8px; }
+  header .coluna { display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .2px; }
+  header h1::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 10px;
+                      border-radius: 50%; background: var(--acento); vertical-align: middle; }
+  #limpar { background: none; border: none; color: var(--sutil); font: inherit; font-size: 14px; cursor: pointer; }
+  #limpar:hover { color: var(--texto); }
+
+  main { flex: 1; overflow-y: auto; }
+  #chat { display: flex; flex-direction: column; gap: 18px; padding-top: 24px; padding-bottom: 24px; min-height: 100%; }
+  .vazio { margin: auto; text-align: center; color: var(--sutil); }
+  .vazio strong { display: block; color: var(--texto); font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+
+  .msg { max-width: 85%; white-space: pre-wrap; animation: surgir .25s ease; }
+  .msg.user { align-self: flex-end; background: var(--usuario); padding: 10px 16px; border-radius: 18px 18px 4px 18px; }
+  .msg.model { align-self: flex-start; }
+  .msg.erro { align-self: center; color: var(--erro); font-size: 14px; }
+  .ouvir { display: block; margin-top: 6px; background: none; border: none; padding: 0;
+           color: var(--sutil); font: inherit; font-size: 13px; cursor: pointer; }
+  .ouvir:hover { color: var(--acento); }
+  @keyframes surgir { from { opacity: 0; transform: translateY(4px); } }
+
+  #status { min-height: 22px; font-size: 14px; color: var(--sutil); }
+  #status:not(:empty)::after { content: "…"; animation: piscar 1s infinite; }
+  @keyframes piscar { 50% { opacity: .3; } }
+
+  footer { padding: 8px 0 20px; }
+  .caixa { display: flex; align-items: center; gap: 6px; padding: 6px; background: var(--superficie);
+           border: 1px solid var(--borda); border-radius: 999px; box-shadow: 0 1px 3px rgb(0 0 0 / .05); }
+  .caixa:focus-within { border-color: var(--acento); }
+  #texto { flex: 1; min-width: 0; border: none; outline: none; background: none; color: var(--texto);
+           font: inherit; padding: 8px 12px; }
+  .redondo { flex: none; width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+             display: grid; place-items: center; background: none; color: var(--sutil); }
+  .redondo:hover:not(:disabled) { color: var(--texto); }
+  .redondo:disabled { opacity: .35; cursor: default; }
+  .redondo svg { width: 20px; height: 20px; }
+  #enviar { background: var(--acento); color: #fff; }
+  #enviar:hover:not(:disabled) { color: #fff; filter: brightness(1.1); }
+  #mic.gravando { background: var(--erro); color: #fff; animation: piscar 1.2s infinite; }
+</style>
+</head>
+<body>
+<header>
+  <div class="coluna">
+    <h1>Jarvis</h1>
+    <button id="limpar">Nova conversa</button>
+  </div>
+</header>
+
+<main id="rolagem">
+  <section id="chat" class="coluna">
+    <div class="vazio" id="vazio">
+      <strong>Olá, eu sou o Jarvis.</strong>
+      Fale pelo microfone ou digite uma mensagem.
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="coluna">
+    <div id="status"></div>
+    <div class="caixa">
+      <button id="mic" class="redondo" title="Falar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <input id="texto" placeholder="Pergunte algo ao Jarvis" autocomplete="off">
+      <button id="enviar" class="redondo" title="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </button>
+    </div>
+  </div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const chat = $("chat"), vazio = $("vazio");
+let historico = [];
+let ocupado = false;
+let opcoes = { modelo: undefined, voz: undefined };
+
+fetch("/api/opcoes").then((r) => r.json())
+  .then((r) => { opcoes = { modelo: r.whisper_padrao, voz: r.voz_padrao }; })
+  .catch(() => {});
+
+const status = (t) => { $("status").textContent = t || ""; };
+const rolar = () => { $("rolagem").scrollTop = $("rolagem").scrollHeight; };
+
+function adicionar(papel, texto) {
+  vazio.remove();
+  const div = document.createElement("div");
+  div.className = `msg ${papel}`;
+  div.textContent = texto;
+  chat.appendChild(div);
+  rolar();
+  return div;
+}
+
+async function chamar(url, opts) {
+  const r = await fetch(url, opts);
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.detail || `Erro ${r.status}`);
+  return dados;
+}
+
+function travar(sim) {
+  ocupado = sim;
+  $("texto").disabled = $("enviar").disabled = sim;
+  if (!gravador || gravador.state !== "recording") $("mic").disabled = sim;
+}
+
+async function processar({ audio, texto }) {
+  if (ocupado) return;
+  travar(true);
+  try {
+    if (audio) {
+      status("Transcrevendo");
+      const form = new FormData();
+      form.append("audio", audio, audio.name);
+      if (opcoes.modelo) form.append("modelo", opcoes.modelo);
+      const t = await chamar("/api/transcrever", { method: "POST", body: form });
+      if (!t.texto) throw new Error("Não entendi o áudio. Tente de novo.");
+      texto = t.texto;
+    }
+    adicionar("user", texto);
+
+    status("Pensando");
+    const r = await chamar("/api/responder", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto, historico }),
+    });
+    historico.push({ papel: "user", texto }, { papel: "model", texto: r.texto });
+
+    status("Preparando a voz");
+    const msg = adicionar("model", r.texto);
+    try {
+      const f = await chamar("/api/falar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: r.texto, ...(opcoes.voz && { voz: opcoes.voz }) }),
+      });
+      const som = new Audio(f.url);
+      const botao = document.createElement("button");
+      botao.className = "ouvir";
+      botao.textContent = "▶ Ouvir de novo";
+      botao.onclick = () => { som.currentTime = 0; som.play(); };
+      msg.appendChild(botao);
+      som.play().catch(() => {});
+    } catch {}
+  } catch (e) {
+    adicionar("erro", e.message);
+  } finally {
+    status();
+    travar(false);
+    rolar();
+    $("texto").focus();
+  }
+}
+
+function enviarTexto() {
+  const t = $("texto").value.trim();
+  if (!t) return;
+  $("texto").value = "";
+  processar({ texto: t });
+}
+$("enviar").onclick = enviarTexto;
+$("texto").addEventListener("keydown", (e) => { if (e.key === "Enter") enviarTexto(); });
+$("limpar").onclick = () => { historico = []; chat.innerHTML = ""; chat.appendChild(vazio); };
+
+let gravador = null, partes = [];
+$("mic").onclick = async () => {
+  if (gravador && gravador.state === "recording") { gravador.stop(); return; }
+  if (ocupado) return;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    adicionar("erro", "Não consegui acessar o microfone. Verifique a permissão do navegador.");
+    return;
+  }
+  partes = [];
+  gravador = new MediaRecorder(stream);
+  gravador.ondataavailable = (e) => e.data.size && partes.push(e.data);
+  gravador.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    $("mic").classList.remove("gravando");
+    status();
+    const blob = new Blob(partes, { type: gravador.mimeType });
+    const ext = gravador.mimeType.includes("ogg") ? "ogg" : "webm";
+    if (blob.size) processar({ audio: new File([blob], `gravacao.${ext}`, { type: blob.type }) });
+  };
+  gravador.start();
+  $("mic").classList.add("gravando");
+  status("Ouvindo — clique no microfone para parar");
+};
+</script>
+</body>
+</html>

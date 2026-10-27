@@ -2,30 +2,64 @@
 
 Assistente de voz: **áudio → transcrição (faster-whisper) → resposta (Ollama, qwen2.5:1.5b) → voz (Kokoro)**.
 
-## Preparar
+## Instalação (Linux)
+
+### 1. Pacotes do sistema
+
+Arch / Manjaro:
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.exemplo .env
+sudo pacman -S --needed python git wget ollama
+```
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git wget curl
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Fedora:
+
+```bash
+sudo dnf install -y python3 python3-pip git wget curl
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+### 2. Ollama + modelo de linguagem
+
+```bash
+sudo systemctl enable --now ollama
 ollama pull qwen2.5:1.5b
 ```
 
-Baixe os modelos do Kokoro para `modelos/` (não vão para o git):
+### 3. Ambiente Python
 
 ```bash
-cd modelos
-wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
-wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.exemplo .env
 ```
+
+### 4. Modelos de voz do Kokoro
+
+Ficam em `modelos/` (fora do git):
+
+```bash
+wget -P modelos https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+wget -P modelos https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+```
+
+O modelo do Whisper é baixado sozinho na primeira transcrição.
 
 ## Rodar
 
 ```bash
-.venv/bin/python app.py       # abra http://localhost:8000
+.venv/bin/python app.py
 ```
 
-Na interface dá para gravar pelo microfone, enviar um arquivo de áudio ou digitar.
+Abra http://localhost:8000. Na interface dá para gravar pelo microfone, enviar um arquivo de áudio ou digitar.
 Em ⚙ Configurações: modelo do Whisper, voz, velocidade e autoplay.
 
 ## Estrutura
@@ -40,7 +74,5 @@ jarvis/
   perguntar_ollama.py   prompt do Jarvis + chamada ao Ollama
   voz.py                Kokoro TTS
 modelos/                arquivos .onnx / vozes (ignorado pelo git)
-audios/                 áudios de teste
 saidas/                 .wav gerados pela interface (ignorado pelo git)
-legado/                 scripts antigos (teste_whisper.py, agent.py, talk.py...)
 ```

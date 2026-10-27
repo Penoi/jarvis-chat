@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Segredos
+.env
+
+# Gerados pela interface
+saidas/*
+!saidas/.gitkeep
+
+# Modelos (pesados, baixar à parte)
+modelos/*
+!modelos/.gitkeep
